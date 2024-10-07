@@ -4,5 +4,6 @@ terraform.tfstate
 terraform.tfstate.backup
 terraform.tfvars
 .env
+.DS_Store
 
 __pycache__

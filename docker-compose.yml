@@ -1,0 +1,11 @@
+services:
+  terraform:
+    container_name: terraform
+    build:  
+      context: .docker
+      dockerfile: Dockerfile
+    volumes: 
+      - ./src:/home/terraform/src
+      - ./.aws:/root/.aws
+    working_dir: /home/terraform/src
+    tty: true

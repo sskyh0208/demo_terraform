@@ -1,0 +1,8 @@
+.aws/credentials
+.terraform*
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfvars
+.env
+
+__pycache__

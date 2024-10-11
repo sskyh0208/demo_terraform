@@ -15,6 +15,10 @@ locals {
   container_image_uri = "public.ecr.aws/nginx/nginx:alpine-slim"
 
   definition_file_path = "./definitions/ecs_runtask.yaml"
+
+  function_name = "execute-sfn"
+  key           = "${local.function_name}.zip"
+  key_hash      = "${local.key}.base64sha256"
 }
 ###############################################################################
 # VPC
@@ -206,6 +210,45 @@ resource "aws_iam_policy" "custom_sfn" {
   })
 }
 
+resource "aws_iam_role" "lambda" {
+  name                = "${var.product_name}-${local.env_name}-role-lambda"
+  assume_role_policy  = data.aws_iam_policy_document.assume_lambda.json
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+    aws_iam_policy.custom_lambda.arn,
+  ]
+}
+
+data "aws_iam_policy_document" "assume_lambda" {
+  statement {
+    actions = [ "sts:AssumeRole" ]
+
+    principals {
+      type        = "Service"
+      identifiers = [ "lambda.amazonaws.com" ]
+    }
+  }
+}
+
+resource "aws_iam_policy" "custom_lambda" {
+  name        = "${var.product_name}-${local.env_name}-custom-policy-lambda"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "states:StartExecution",
+          "states:DescribeExecution",
+        ]
+        Effect   = "Allow"
+        Resource = [
+          aws_sfn_state_machine.state.arn,
+        ]
+      }
+    ]
+  })
+}
+
 ###############################################################################
 # Launch Template
 ###############################################################################
@@ -350,4 +393,78 @@ resource "aws_sfn_state_machine" "state" {
     ContainerName     = local.container_name,
     TaskDefinitionArn = aws_ecs_task_definition.main.arn,
   })))
+}
+
+###############################################################################
+# S3
+###############################################################################
+resource "aws_s3_bucket" "lambda" {
+  bucket        = "${var.product_name}-${local.env_name}-lambda-${local.aws_account_id}"
+  force_destroy = true
+}
+
+###############################################################################
+# Lambda
+###############################################################################
+resource "null_resource" "deploy_lambda" {
+  depends_on = [ aws_s3_bucket.lambda ]
+
+  triggers = {
+    # "code_diff" = filebase64("${path.module}/function/lambda_function.py")
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    working_dir = "${path.module}/function"
+    command = "zip -r ${local.key} lambda_function.py"
+  }
+
+  provisioner "local-exec" {
+    working_dir = "${path.module}/function"
+    command = "aws s3 cp --profile ${local.env_name} ${local.key} s3://${aws_s3_bucket.lambda.bucket}/${local.key}"
+  }
+
+  provisioner "local-exec" {
+    working_dir = "${path.module}/function"
+    command = "openssl dgst -sha256 -binary ${local.key} | openssl enc -base64 | tr -d \"\n\" > ${local.key_hash}"
+  }
+
+  provisioner "local-exec" {
+    working_dir = "${path.module}/function"
+    command = "aws s3 cp --profile ${local.env_name} ${local.key_hash} s3://${aws_s3_bucket.lambda.bucket}/${local.key_hash}.txt"
+  }
+
+  provisioner "local-exec" {
+    working_dir = "${path.module}/function"
+    command = "rm -f ${local.key} ${local.key_hash}"
+  }
+}
+
+data "aws_s3_object" "archive" {
+    depends_on = [ null_resource.deploy_lambda ]
+    bucket     = aws_s3_bucket.lambda.bucket
+    key        = local.key
+}
+
+data "aws_s3_object" "archive_hash" {
+  depends_on = [ null_resource.deploy_lambda ]
+  bucket     = aws_s3_bucket.lambda.bucket
+  key        = "${local.key_hash}.txt"
+}
+
+resource "aws_lambda_function" "lambda" {
+  function_name    = "${var.product_name}-${local.env_name}-lambda-${local.function_name}"
+  role             = aws_iam_role.lambda.arn
+  s3_bucket        = aws_s3_bucket.lambda.bucket
+  s3_key           = data.aws_s3_object.archive.key
+  source_code_hash = data.aws_s3_object.archive_hash.body
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.12"
+  timeout          = 10
+  memory_size      = 128
+  environment {
+    variables = {
+      SFN_STATE_MACHINE_ARN = aws_sfn_state_machine.state.arn
+    }
+  }
 }

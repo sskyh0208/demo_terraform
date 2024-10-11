@@ -1,0 +1,22 @@
+StartAt: EcsRunTask
+Comment: "Run ECS Task"
+States:
+  EcsRunTask:
+    Type: Task
+    Resource: arn:aws:states:::ecs:runTask.sync
+    Parameters:
+      Cluster: ${ClusterArn}
+      TaskDefinition: ${TaskDefinitionArn}
+      Overrides:
+        ContainerOverrides:
+          - Name: ${ContainerName}
+            Command.$: $.commands
+    Catch:
+      - ErrorEquals:
+          - States.ALL
+        Next: Failed
+    Next: Succeed
+  Succeed:
+    Type: Succeed
+  Failed:
+    Type: Fail

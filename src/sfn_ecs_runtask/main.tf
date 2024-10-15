@@ -4,15 +4,18 @@ locals {
   az_1a = "${var.aws_region}a"
   az_1c = "${var.aws_region}c"
 
-  instance_type = "g4dn.xlarge"
+  # instance_type = "g4dn.xlarge"
+  instance_type = "t2.micro"
   image_id      = "ami-02d179baf46aa9423"
+  cpu           = 512
+  memory_size   = 768
 
   max_size = 1
   min_size = 0
   desired_capacity = 0
 
-  container_name      = "nginx"
-  container_image_uri = "public.ecr.aws/nginx/nginx:alpine-slim"
+  container_name      = "python"
+  container_image_uri = "public.ecr.aws/docker/library/python:3.12.7-slim"
 
   definition_file_path = "./definitions/ecs_runtask.yaml"
 
@@ -358,17 +361,9 @@ resource "aws_ecs_task_definition" "main" {
     {
       name      = local.container_name
       image     = local.container_image_uri
-      cpu       = 128
-      memory    = 256
+      cpu       = local.cpu
+      memory    = local.memory_size
       essential = true
-      portMappings = [
-        {
-          name          = local.container_name
-          containerPort = 80
-          hostPort      = 80
-          protocol      = "tcp"
-        }
-      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {

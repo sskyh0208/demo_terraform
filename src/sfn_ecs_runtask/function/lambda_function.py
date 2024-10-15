@@ -75,9 +75,10 @@ def lambda_handler(event, context):
     input = {
         'execution_id': execution_id,
         'commands': [
-            'echo',
-            bucket_name,
-            obj_key,
+            # pythonのコマンドを実行する
+            'python',
+            '-c',
+            f'bucket_name = "{bucket_name}"; obj_key = "{obj_key}"; etag = "{etag}"; print(bucket_name, obj_key, etag)'
         ]
     }
 

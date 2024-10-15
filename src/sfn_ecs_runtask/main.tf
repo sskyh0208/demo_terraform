@@ -4,8 +4,8 @@ locals {
   az_1a = "${var.aws_region}a"
   az_1c = "${var.aws_region}c"
 
-  instance_type = "t2.micro"
-  image_id      = "ami-0847264f8522092f2"
+  instance_type = "g4dn.xlarge"
+  image_id      = "ami-02d179baf46aa9423"
 
   max_size = 1
   min_size = 0
@@ -243,6 +243,7 @@ resource "aws_iam_policy" "custom_lambda" {
         Effect   = "Allow"
         Resource = [
           aws_sfn_state_machine.state.arn,
+          "arn:aws:states:${var.aws_region}:${local.aws_account_id}:execution:${var.product_name}-${local.env_name}-sfn-esc-runtask:*",
         ]
       }
     ]
@@ -410,8 +411,7 @@ resource "null_resource" "deploy_lambda" {
   depends_on = [ aws_s3_bucket.lambda ]
 
   triggers = {
-    # "code_diff" = filebase64("${path.module}/function/lambda_function.py")
-    always_run = timestamp()
+    "code_diff" = filebase64("${path.module}/function/lambda_function.py")
   }
 
   provisioner "local-exec" {

@@ -37,11 +37,11 @@ def check_executed_sfn(id: str) -> bool:
     '''
     split_sfn_arn = SFN_STATE_MACHINE_ARN.split(':')
     split_sfn_arn[-2] = 'execution'
-    target_id = f'{":".join(split_sfn_arn)}:{id}'
+    target_arn = f'{":".join(split_sfn_arn)}:{id}'
     print(f'check_id: {id}')
     try:
         res = sfn.describe_execution(
-            executionArn=target_id
+            executionArn=target_arn
         )
         status = res.get('status')
         print(f'{id}: {status}')
